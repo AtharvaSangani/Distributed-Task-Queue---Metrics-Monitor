@@ -1,0 +1,66 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: task_queue_redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: task_queue_api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - API_PORT=8000
+      - API_HOST=0.0.0.0
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: ["uvicorn", "src.producer:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - BASE_BACKOFF_SECONDS=2.0
+      - MAX_RETRIES=3
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: ["python", "worker.py"]
+
+  locust:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: task_queue_locust
+    ports:
+      - "8089:8089"
+    environment:
+      - LOCUST_HOST=http://api:8000
+    depends_on:
+      - api
+    command: ["locust", "-f", "locustfile.py", "--host", "http://api:8000", "--web-port", "8089"]
+    restart: unless-stopped
+
+volumes:
+  redis_data:
