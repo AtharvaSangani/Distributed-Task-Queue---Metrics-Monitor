@@ -343,23 +343,5 @@ pytest -v
 
 ---
 
-## Amazon SDE Interview Talking Points & System Trade-Offs
-
-### 1. Delivery Guarantees: At-Least-Once vs. Exactly-Once
-- **This System's Model**: Uses **At-Least-Once** delivery. If a worker crashes after popping a task but before writing `COMPLETED`, the task can be re-executed.
-- **Idempotency Requirement**: In real-world production (e.g., payment processing, credit card charges), downstream task handlers must be **idempotent**. An idempotency token (e.g., `client_request_token` or database unique constraint) ensures that duplicate task executions do not cause duplicate state mutations.
-
-### 2. Redis Persistence Trade-Offs: In-Memory Speed vs. Durability
-- **Pure In-Memory (No Persistence)**: Microsecond latencies, but in-flight tasks in `task_queue` are lost if Redis restarts.
-- **RDB (Point-in-Time Snapshots)**: Low performance overhead, but risks losing recent tasks since the last snapshot.
-- **AOF (Append Only File) with `appendfsync everysec`** (Configured in our `docker-compose.yml`): Flushes transactions to disk every second. Limits data loss window to $\le 1$s while preserving high write throughput.
-
-### 3. Queue Mechanism Comparison: Redis vs. AWS SQS vs. Apache Kafka
-- **Redis (`LPUSH` / `BRPOP`)**: Ultra-low latency ($<1$ms), lightweight, trivial to self-host. Lacks native visibility timeouts (unless using Redis Streams or `BRPOPLPUSH` with processing queues).
-- **AWS SQS**: Fully managed, built-in visibility timeout (automatic redelivery if worker dies), native Dead-Letter Queues, scales to virtually unlimited throughput, but higher latency (~10-25ms) and vendor lock-in.
-- **Apache Kafka**: Distributed commit log ideal for high-throughput event streaming and replayability from arbitrary offsets, but higher operational complexity and overkill for simple point-to-point task dispatch.
-
----
-
 ## License
 MIT License. Created for distributed systems demonstration and portfolio presentation.
